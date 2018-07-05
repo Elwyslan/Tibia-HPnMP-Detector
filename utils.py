@@ -26,7 +26,17 @@ def findBoundaryBoxes(srcImage, minArea=3000, contourThresh=2.0):
 
 	return retValues
 
+def enhanceDigit(digitImage, thrOffset=50, scaleFactor=0.2):
+	hist, _ = np.histogram(digitImage, 256, [0,256])
+	indexMaxValue = np.argmax(hist)
+	binaryThreshold = indexMaxValue + thrOffset
+	_ ,thrDigit = cv2.threshold(digitImage, binaryThreshold, 255, cv2.THRESH_BINARY_INV)
 
+	if scaleFactor > 0:
+		h, w = thrDigit.shape
+		thrDigit = cv2.resize(thrDigit, (0,0), fx=scaleFactor, fy=scaleFactor)
+
+	return thrDigit
 
 
 if __name__ == '__main__':
