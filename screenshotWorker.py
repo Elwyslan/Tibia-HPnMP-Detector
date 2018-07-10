@@ -1,10 +1,19 @@
 import sys
+import os
 import threading
 from PIL import ImageGrab
 from PIL import Image
 import cv2
 import numpy as np
 import time
+from skimage import measure
+import random
+import pandas as pd
+from collections import Counter
+from sklearn import svm, model_selection, neighbors
+from sklearn.ensemble import VotingClassifier, RandomForestClassifier
+import warnings
+warnings.filterwarnings("ignore")
 
 def getRawScreenshot(grayImg=False, PILFormat=False, bbox=None, cv2ResizeBbox=None):
 	try:
@@ -28,6 +37,42 @@ def getRawScreenshot(grayImg=False, PILFormat=False, bbox=None, cv2ResizeBbox=No
 		return Image.fromarray(screenCap)
 	else:
 		return screenCap
+
+def enhanceDigit(digitImage, thrOffset=50, scaleFactor=0.2):
+	hist, _ = np.histogram(digitImage, 256, [0,256])
+	indexMaxValue = np.argmax(hist)
+	binaryThreshold = indexMaxValue + thrOffset
+	_ ,thrDigit = cv2.threshold(digitImage, binaryThreshold, 255, cv2.THRESH_BINARY_INV)
+
+	if scaleFactor > 0:
+		h, w = thrDigit.shape
+		thrDigit = cv2.resize(thrDigit, (0,0), fx=scaleFactor, fy=scaleFactor)
+
+	return thrDigit
+
+def findBoundaryBoxes(srcImage, minArea=3000, contourThresh=2.0):
+	hist = np.histogram(srcImage, bins=np.arange(0, 256))
+	indexMaxValue = np.argmax(hist[0])
+	threshValue = indexMaxValue + 30
+	
+	_, threshImg = cv2.threshold(srcImage, threshValue, 255, cv2.THRESH_BINARY)
+
+	contours = measure.find_contours(threshImg, contourThresh)
+
+	retValues = []
+	for contour in contours:
+		x = contour[:, 1]
+		y = contour[:, 0]
+		xmin = int(min(x)) - 10
+		ymin = int(min(y)) - 10
+		xmax = int(max(x)) + 10
+		ymax = int(max(y)) + 10
+		area = (xmax-xmin)*(ymax-ymin)
+		
+		if area>minArea:
+			retValues.append((xmin, ymin, xmax, ymax))
+
+	return retValues
 
 
 class ScreenshotGrab(threading.Thread):
@@ -72,20 +117,20 @@ class ScreenshotGrab(threading.Thread):
 
 
 class HPnMPBarsDetection(threading.Thread):
-	def __init__(self, hpmpCascade):
+	def __init__(self, hpmpCascade, numberClassifier):
 		threading.Thread.__init__(self)
 		self.runLoop = True
 		self.daemon = True
 		self.name = 'Automatic HPMP Detection Thread'
 		self.scrGrab = ScreenshotGrab()
 
-		if isinstance(hpmpCascade, cv2.CascadeClassifier):
-			self.hpmpCascade = hpmpCascade
-		else:
-			raise Exception('Invalid Cascade Classifier')
+		self.numberClassifier = numberClassifier
+		self.hpmpCascade = hpmpCascade
 
 		self.processedImg = -1
 		self.detectedBox = None
+		self.detectedHP = -1
+		self.detectedMP = -1
 
 	def run(self):
 		self.scrGrab.start()
@@ -117,7 +162,36 @@ class HPnMPBarsDetection(threading.Thread):
 					hp_mp_bars = self.hpmpCascade.detectMultiScale(cannySS)
 					for (x, y, w, h) in hp_mp_bars:
 						self.detectedBox = (x, y, w, h)
-						print('detectedBox: {}',self.detectedBox)
+						#Detect Numbers
+						print('detectedBox: {}'.format(self.detectedBox))
+						img = mainSS[y:y+h, x:x+w]
+						hp_img, mp_img = self.extractHPMPImages(img)
+
+						bboxesHP = findBoundaryBoxes(hp_img)
+						hp = []
+						for bbox in bboxesHP:
+							xmin, ymin, xmax, ymax = bbox
+							digit = hp_img[ymin:ymax, xmin:xmax]
+							digitValue = self.recognizeDigit(digit)
+							hp.append((xmin, digitValue))	
+						hp.sort(key=lambda x: x[0])
+						hp = [n[1] for n in hp]
+						hp = int(''.join(hp))
+						self.detectedHP = hp
+						
+						bboxesMP = findBoundaryBoxes(mp_img)
+						mp = []
+						for bbox in bboxesMP:
+							xmin, ymin, xmax, ymax = bbox
+							digit = mp_img[ymin:ymax, xmin:xmax]
+							digitValue = self.recognizeDigit(digit)
+							mp.append((xmin, digitValue))
+						mp.sort(key=lambda x: x[0])
+						mp = [n[1] for n in mp]
+						mp = int(''.join(mp))
+						self.detectedMP = mp
+
+						print('HP:{}\nMP:{}\n{}'.format(hp,mp,'#'*50))
 						break
 						
 				except Exception as e:
@@ -126,16 +200,53 @@ class HPnMPBarsDetection(threading.Thread):
 				
 		self.scrGrab.endLoop()
 
+	def extractHPMPImages(self, img):
+		imgHeight, imgWidth = img.shape
+		img = img[0:imgHeight, int(0.70*imgWidth):imgWidth]
+		img = cv2.resize(img, (0,0), fx=10.0, fy=10.0)
+		h, w = img.shape
+		hp_img = img[0:int(h/2), 0:w]
+		mp_img = img[int(h/2):h, 0:w]
+		return (hp_img, mp_img)
+
+	def recognizeDigit(self, digit):
+		digit = cv2.resize(digit, (50, 65))
+		digit = enhanceDigit(digit)
+		#EXTRACT FEATURES
+		#Mean normalize all rows
+		digit = digit.astype(np.float32)
+		for row in range(digit.shape[0]):
+			u = digit[row, :].mean()
+			digit[row, :] = digit[row, :] - u
+
+		#Extract main eigenvectors
+		_, _, Vh = np.linalg.svd(digit)
+		p_eigVec = Vh[0:int(len(Vh)/1.4)]
+
+		#Normalize the features
+		featuresVec = p_eigVec.dot(digit.T).flatten()
+		maxV = featuresVec.max()
+		minV = featuresVec.min()
+		featuresVec = (2*(featuresVec - minV)/(maxV - minV)) - 1.0
+		if np.isnan(featuresVec.mean()):
+			featuresVec = np.nan_to_num(featuresVec)
+
+		number = self.numberClassifier.predict([featuresVec])[0]
+		return str(number)
+
+
 	def getDetectedBox(self):
 		if isinstance(self.detectedBox, tuple):
 			return self.detectedBox
 		else:
 			return (0, 0, 0, 0)
+
+	def getHPMP(self):
+		return (self.detectedHP, self.detectedMP)
 	
 	def endLoop(self):
+		self.scrGrab.endLoop()
 		self.runLoop = False
-
-
 
 
 if __name__ == '__main__':

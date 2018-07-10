@@ -17,9 +17,9 @@ VERDANA09 = ("Verdana", 9)
 VERDANA08 = ("Verdana", 8)
 
 class DisplayImg(threading.Thread):
-	def __init__(self, lblWidget, cascadeClassifier, mainTkApp):
+	def __init__(self, lblWidget, cascadeClassifier, numberClassifier, mainTkApp):
 		threading.Thread.__init__(self)
-		self.hpmpBarsDetector = HPnMPBarsDetection(cascadeClassifier)
+		self.hpmpBarsDetector = HPnMPBarsDetection(cascadeClassifier, numberClassifier)
 		self.hpmpBarsDetector.start()
 		self.lblInstance = lblWidget
 		self.mainTkApp = mainTkApp
@@ -70,11 +70,9 @@ class DisplayImg(threading.Thread):
 			self.lblInstance.image = img
 			time.sleep(0.1)
 
-	def setBBox(bbox):
-		if isinstance(bbox, tuple):
-			if len(bbox)==4:
-				pass
-		pass
+	def getHPMP(self):
+		return self.hpmpBarsDetector.getHPMP()
+		
 
 	def endLoop(self):
 		self.runLoop = False
@@ -118,8 +116,9 @@ class GUIManager(threading.Thread):
 
 	def run(self):
 		while self.runLoop:
-			self.tkAppInstance.setHPLbl(random.randint(0,20000))
-			self.tkAppInstance.setMPLbl(random.randint(0,20000))
+			hp, mp = self.tkAppInstance.displayImg.getHPMP()
+			self.tkAppInstance.setHPLbl(hp)
+			self.tkAppInstance.setMPLbl(mp)
 
 			hpCheck = self.tkAppInstance.getHPCheckBox()
 			mpCheck = self.tkAppInstance.getMPCheckBox()
@@ -159,12 +158,13 @@ class GUIManager(threading.Thread):
 
 
 class HPMPdetectorScreen(tk.Tk):
-	def __init__(self, cascadeClassifier, *args, **kwargs):
+	def __init__(self, cascadeClassifier, numberClassifier, *args, **kwargs):
 		tk.Tk.__init__(self, *args, **kwargs)
-		self.geometry("450x210")
+		self.geometry("450x250")
 		self.resizable(0,0)
 		self.title("Tibia - HP and MP detector")
 		self.iconbitmap(self,default='app_favico.ico')
+		self.numberClassifier = numberClassifier
 
 		mainFrame = tk.Frame(self)
 		
@@ -220,15 +220,15 @@ class HPMPdetectorScreen(tk.Tk):
 		self.x0Var = tk.StringVar()
 		x0Ent = tk.Entry(frameImgParams, font=VERDANA08, width=4, textvariable=self.x0Var)
 		self.x0MskThread = MaskEntry(x0Ent, maxLength=3)
-		y0Lbl = tk.Label(frameImgParams, text="y0:", font=VERDANA09)
+		y0Lbl = tk.Label(frameImgParams, text="y0:", font=VERDANA08)
 		self.y0Var = tk.StringVar()
 		y0Ent = tk.Entry(frameImgParams, font=VERDANA08, width=4, textvariable=self.y0Var)
 		self.y0MskThread = MaskEntry(y0Ent, maxLength=3)
-		widthThrsLbl = tk.Label(frameImgParams, text="width:", font=VERDANA09)
+		widthThrsLbl = tk.Label(frameImgParams, text="width:", font=VERDANA08)
 		self.widthThrs = tk.StringVar()
 		widthThrsEnt = tk.Entry(frameImgParams, font=VERDANA08, width=4, textvariable=self.widthThrs)
 		self.wThrsMskThread = MaskEntry(widthThrsEnt, maxLength=3)
-		heightThrsLbl = tk.Label(frameImgParams, text="height:", font=VERDANA09)
+		heightThrsLbl = tk.Label(frameImgParams, text="height:", font=VERDANA08)
 		self.heightThrs = tk.StringVar()
 		heightThrsEnt = tk.Entry(frameImgParams, font=VERDANA08, width=4, textvariable=self.heightThrs)
 		self.hThrsMskThread = MaskEntry(heightThrsEnt, maxLength=3)
@@ -245,10 +245,9 @@ class HPMPdetectorScreen(tk.Tk):
 		#Image show
 		frameImgShow = tk.Frame(frameImg)
 		imshowLbl = tk.Label(frameImgShow, borderwidth=2, relief="solid")
-		self.displayImg = DisplayImg(imshowLbl, cascadeClassifier, self)
+		self.displayImg = DisplayImg(imshowLbl, cascadeClassifier, numberClassifier, self)
 		imshowLbl.pack()
 		frameImgShow.grid(row=1,column=0)
-
 
 		#mainframe Pack
 		frameHP.grid(row=0,column=0)

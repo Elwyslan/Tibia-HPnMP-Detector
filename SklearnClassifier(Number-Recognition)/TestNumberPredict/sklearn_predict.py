@@ -78,7 +78,7 @@ if __name__ == '__main__':
 
 			#Extract main eigenvectors
 			_, _, Vh = np.linalg.svd(enhancedImg)
-			p_eigVec = Vh[0:int(len(Vh)/EIGENVEC_REDUCTION)]
+			p_eigVec = Vh[0:int(len(Vh)/1.4)]
 			
 			#Normalize the features
 			featuresVec = p_eigVec.dot(enhancedImg.T).flatten()

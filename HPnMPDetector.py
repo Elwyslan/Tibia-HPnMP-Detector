@@ -29,44 +29,9 @@ if __name__ == '__main__':
 	print(SRC_HPMP_CASCADE)
 	print(SRC_NUMBER_CLASSIFIER)
 
-	mainScreen = HPMPdetectorScreen(cascadeClassifier=hp_mp_cascade)
+	mainScreen = HPMPdetectorScreen(cascadeClassifier=hp_mp_cascade, numberClassifier=numberClf)
 	mainScreen.mainloop()
 
 	print('End!')
 	sys.exit(0)
-
-
-
-
-	"""
-	while True:
-		screenCap = ImageGrab.grab()
-		screenCap = np.array(screenCap)
-		screenCap = cv2.cvtColor(screenCap, cv2.COLOR_RGB2BGR)
-		screenHeight, screenWidth, _ = screenCap.shape
-		
-		#screenCap = cv2.resize(screenCap, (0,0), fx=0.75, fy=0.75)
-		screenCap = cv2.resize(screenCap, (0,0), fx=0.55, fy=0.55)
-		
-		screenCanny = cv2.Canny(screenCap, 100, 200)
-
-		hp_mp_bars = hp_mp_cascade.detectMultiScale(screenCanny)
-		try:
-			print('Qtd. deteccoes: {}'.format(len(hp_mp_bars)))
-			unixTimestamp = str(time.time()).replace('.','')
-			for (x, y, w, h) in hp_mp_bars:
-				#print(x, y, w, h)
-				savBox = screenCap[y:y+h, x:x+w]
-				cv2.imwrite('savedBoxes/{}_{}.{}.{}.{}.png'.format(unixTimestamp,x,y,w,h), savBox)
-				cv2.rectangle(screenCap, (x, y), (x+w, y+h), (0, 255, 0), 3)
-
-		except Exception as e:
-				print(str(e))
-				pass
-		
-		cv2.imshow('Screenshot', screenCap)
-		
-		k = cv2.waitKey(5000) & 0xff
-		if k==27:
-			break"""
 			
