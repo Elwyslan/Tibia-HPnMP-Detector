@@ -4,13 +4,13 @@ import sys
 import pickle
 import time
 import numpy as np
-from PIL import ImageGrab
 from utils import findBoundaryBoxes, enhanceDigit
+from gui import HPMPdetectorScreen
 
 EIGENVEC_REDUCTION = 1.4
 CWD = os.getcwd()
-SRC_HPMP_CASCADE = CWD + '\\0-HaarCascadeClassifier_(HPnMP-bars)\\results_w40h10\\cascade.xml'
-SRC_NUMBER_CLASSIFIER = CWD + '\\1-SklearnClassifier(Number-Recognition)\\NumberPredict\\'
+SRC_HPMP_CASCADE = CWD + '\\HaarCascadeClassifier_(HPnMP-bars)\\results_w40h10\\cascade.xml'
+SRC_NUMBER_CLASSIFIER = CWD + '\\SklearnClassifier(Number-Recognition)\\NumberPredict\\'
 if sys.platform.startswith('linux'):
 	SRC_HPMP_CASCADE = SRC_HPMP_CASCADE.replace('\\','/')
 	SRC_NUMBER_CLASSIFIER = SRC_NUMBER_CLASSIFIER.replace('\\','/')
@@ -29,8 +29,11 @@ if __name__ == '__main__':
 	print(SRC_HPMP_CASCADE)
 	print(SRC_NUMBER_CLASSIFIER)
 
+	mainScreen = HPMPdetectorScreen(cascadeClassifier=hp_mp_cascade)
+	mainScreen.mainloop()
 
 	print('End!')
+	sys.exit(0)
 
 
 

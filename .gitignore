@@ -1,4 +1,4 @@
 /__pycache__/*
-/0-HaarCascadeClassifier_(HPnMP-bars)/neg/*
-/0-HaarCascadeClassifier_(HPnMP-bars)/pos/*
-/1-SklearnClassifier(Number-Recognition)/NumberPredict/numbers/*
+/HaarCascadeClassifier_(HPnMP-bars)/neg/*
+/HaarCascadeClassifier_(HPnMP-bars)/pos/*
+/SklearnClassifier(Number-Recognition)/NumberPredict/numbers/*
