@@ -1,24 +1,25 @@
-import tkinter as tk
-from tkinter import ttk
 import threading
-import time
-import random
-import re
+import tkinter as tk
 import sys
-from PIL import ImageTk
-from screenshotWorker import getRawScreenshot
+import time
 from screenshotWorker import HPnMPBarsDetection
+from utils import getRawScreenshot
+from PIL import Image, ImageTk
+import numpy as np
+import re
+import warnings
+warnings.filterwarnings("ignore")
 
-VERDANA16 = ("Verdana", 16)
+#Fonts 
 VERDANA14 = ("Verdana", 14)
-VERDANA12 = ("Verdana", 12)
-VERDANA10 = ("Verdana", 10)
 VERDANA09 = ("Verdana", 9)
 VERDANA08 = ("Verdana", 8)
+
 
 class DisplayImg(threading.Thread):
 	def __init__(self, lblWidget, cascadeClassifier, numberClassifier, mainTkApp):
 		threading.Thread.__init__(self)
+		self.name = 'Display Image Thread'
 		self.hpmpBarsDetector = HPnMPBarsDetection(cascadeClassifier, numberClassifier)
 		self.hpmpBarsDetector.start()
 		self.lblInstance = lblWidget
@@ -27,7 +28,7 @@ class DisplayImg(threading.Thread):
 		self.daemon = True
 		self.maxWidth = 420
 		self.maxHeight = 85
-		self.start()
+		self.lastBBox = (0, 0, 420, 85)
 
 	def run(self):
 		while self.runLoop:
@@ -38,7 +39,7 @@ class DisplayImg(threading.Thread):
 				bbox = self.hpmpBarsDetector.getDetectedBox()
 				fixSizeBbox = (self.maxWidth, self.maxHeight)
 			else:
-				#User bbox
+				#User input bbox
 				bbox = self.mainTkApp.getBBox()
 				fixSizeBbox = None
 			
@@ -65,42 +66,53 @@ class DisplayImg(threading.Thread):
 				bbox = (0, 0, self.maxWidth, self.maxHeight)
 			
 			img = getRawScreenshot(PILFormat=True, bbox=bbox, cv2ResizeBbox=fixSizeBbox)
+			self.lastBBox = bbox
 			img = ImageTk.PhotoImage(img)
 			self.lblInstance.configure(image=img)
 			self.lblInstance.image = img
-			time.sleep(0.1)
+			time.sleep(0.005)
 
 	def getHPMP(self):
-		return self.hpmpBarsDetector.getHPMP()
-		
+		haarCheckB = self.mainTkApp.getHaarCheckBox()
+		if haarCheckB == 1:
+			return self.hpmpBarsDetector.getHPMP()
+		else:
+			return self.hpmpBarsDetector.getHPMP(bbox=self.lastBBox)
+	
 
 	def endLoop(self):
 		self.runLoop = False
+		self.hpmpBarsDetector.endLoop()
 
 
 class MaskEntry(threading.Thread):
 	def __init__(self, entryWidget, maxLength=5):
 		threading.Thread.__init__(self)
+		self.name = 'Mask Entry Thread'
 		self.entryInstance = entryWidget
 		self.runLoop = True
 		self.daemon = True
 		self.maxLength =  maxLength
-		self.start()
 
 	def run(self):
 		while self.runLoop:
-			txtValue = self.entryInstance.get()
-			if len(txtValue) > 0:
-				maskedValue = re.sub("[^0-9]", "", txtValue)
+			try:
+				txtValue = self.entryInstance.get()
+				if len(txtValue) > 0:
+					maskedValue = re.sub("[^0-9]", "", txtValue)
 
-				if len(maskedValue) > self.maxLength:
-					maskedValue = maskedValue[0:self.maxLength]
+					if len(maskedValue) > self.maxLength:
+						maskedValue = maskedValue[0:self.maxLength]
 
-				if maskedValue != txtValue:
-					self.entryInstance.delete(0, tk.END)
-					self.entryInstance.insert(0, maskedValue)
+					if maskedValue != txtValue:
+						self.entryInstance.delete(0, tk.END)
+						self.entryInstance.insert(0, maskedValue)
+			
+			except Exception as e:
+				print('Mask Entry exception: {}'.format(str(e)))
+			finally:
+				time.sleep(0.1)
 
-			time.sleep(0.1)
 
 	def endLoop(self):
 		self.runLoop = False
@@ -109,12 +121,23 @@ class MaskEntry(threading.Thread):
 class GUIManager(threading.Thread):
 	def __init__(self, tkApp):
 		threading.Thread.__init__(self)
+		self.name = 'Gui Manager Thread'
 		self.tkAppInstance = tkApp
 		self.runLoop = True
 		self.daemon = True
 		self.start()
 
 	def run(self):
+		#MAIN LOOP
+		self.tkAppInstance.displayImg.start()
+		self.tkAppInstance.hpMskThread.start()
+		self.tkAppInstance.mpMskThread.start()
+		self.tkAppInstance.x0MskThread.start()
+		self.tkAppInstance.y0MskThread.start()
+		self.tkAppInstance.hThrsMskThread.start()
+		self.tkAppInstance.wThrsMskThread.start()
+
+		time.sleep(1)
 		while self.runLoop:
 			hp, mp = self.tkAppInstance.displayImg.getHPMP()
 			self.tkAppInstance.setHPLbl(hp)
@@ -157,15 +180,17 @@ class GUIManager(threading.Thread):
 		self.tkAppInstance.displayImg.endLoop()
 
 
+#Main GUI Class 
 class HPMPdetectorScreen(tk.Tk):
+
 	def __init__(self, cascadeClassifier, numberClassifier, *args, **kwargs):
 		tk.Tk.__init__(self, *args, **kwargs)
 		self.geometry("450x250")
 		self.resizable(0,0)
 		self.title("Tibia - HP and MP detector")
 		self.iconbitmap(self,default='app_favico.ico')
-		self.numberClassifier = numberClassifier
 
+		#START MAIN SCREEN CONSTRUCTION - mainFrame -
 		mainFrame = tk.Frame(self)
 		
 		#Frame HP_Grid
@@ -322,7 +347,7 @@ class HPMPdetectorScreen(tk.Tk):
 		while len(threading.enumerate())>1:
 			time.sleep(0.01)
 			elapsedTime += 0.01
-			if elapsedTime>2.0:
+			if elapsedTime>1.5:
 				print('Running Theads: {}'.format(threading.enumerate()))
 				break
 		try:
@@ -335,5 +360,4 @@ class HPMPdetectorScreen(tk.Tk):
 
 if __name__ == '__main__':
 	print('Script executed as __main__')
-	print('End!')
 	sys.exit(0)
